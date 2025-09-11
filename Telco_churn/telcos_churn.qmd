@@ -1,0 +1,607 @@
+---
+title: "Telco Customer Churn Prediction"
+format: html
+editor: visual
+---
+
+```{r}
+# Project: Telco Customer Churn Prediction
+# Objective: Predict customer churn using the Telco Customer Churn dataset
+# Author: Mary Ogwo
+# Date: August 10, 2025
+
+# Load required libraries
+library(tidyverse)
+library(readr)
+library(ggplot2)
+library(dplyr)
+library(caret)
+library(randomForest)
+library(Boruta)
+library(pROC)
+library(themis)
+library(recipes)
+library(nnet)
+
+# Set seed for reproducibility
+set.seed(123)
+
+```
+
+# DATA LOADING AND PREPROCESSING
+
+```{r}
+# Load dataset (place Telco-Customer-Churn.csv in data/ folder)
+churn_data <- read.csv("data/Telco-Customer-Churn.csv")
+
+# Check and remove missing values
+print(colSums(is.na(churn_data)))
+churn_data <- na.omit(churn_data)
+
+# Feature engineering
+churn_data <- churn_data %>%
+  mutate(
+    AvgChargePerMonth = TotalCharges / tenure,  # Average monthly charge
+    TenureBin = cut(tenure, breaks = c(-Inf, 12, 24, 48, Inf), labels = c("New", "Short", "Medium", "Long")),
+    Churn = as.factor(Churn),  # Convert Churn to factor
+    SeniorCitizen = as.factor(SeniorCitizen)  # Convert to factor
+  )
+
+# Verify dataset dimensions
+cat("Dataset Dimensions:", dim(churn_data), "\n")
+```
+
+# EXPLORATORY DATA ANALYSIS
+```{r}
+# Identify categorical and numeric variables
+cat_vars <- churn_data %>%
+  select(where(~ is.character(.x) || is.factor(.x))) %>%
+  select(-Churn, -customerID) %>%
+  names()
+
+num_vars <- churn_data %>%
+  select(where(is.numeric)) %>%
+  names()
+
+# Churn rates for categorical variables
+for (var in cat_vars) {
+  cat("Churn Rate by", var, ":\n")
+  print(
+    churn_data %>%
+      group_by(.data[[var]], Churn) %>%
+      summarise(n = n(), .groups = "drop") %>%
+      mutate(percent = round(100 * n / sum(n), 1))
+  )
+  
+  # Bar plot
+  p <- ggplot(churn_data, aes(x = !!sym(var), fill = Churn)) +
+    geom_bar(position = "fill") +
+    scale_y_continuous(labels = scales::percent) +
+    labs(title = paste("Churn Rate by", var), x = var, y = "Proportion") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  print(p)
+  ggsave(paste0("plots/churn_by_", var, ".png"), plot = p, width = 6, height = 4)
+}
+
+# Numeric variables analysis
+for (var in num_vars) {
+  cat("Summary for", var, "by Churn:\n")
+  print(
+    churn_data %>%
+      group_by(Churn) %>%
+      summarise(
+        Mean = mean(.data[[var]], na.rm = TRUE),
+        Median = median(.data[[var]], na.rm = TRUE),
+        SD = sd(.data[[var]], na.rm = TRUE),
+        .groups = "drop"
+      )
+  )
+  
+  # Boxplot
+  p <- ggplot(churn_data, aes(x = Churn, y = .data[[var]], fill = Churn)) +
+    geom_boxplot() +
+    labs(title = paste(var, "by Churn"), x = "Churn", y = var) +
+    theme_minimal() +
+    theme(legend.position = "none")
+  print(p)
+  ggsave(paste0("plots/boxplot_", var, ".png"), plot = p, width = 6, height = 4)
+}
+```
+
+# KEY INSIGHTS:
+## Senior citizens have higher churn rates (25.5% vs. 12.9%).
+## Longer tenure reduces churn likelihood.
+## Higher monthly charges correlate with churn; total charges are lower for churners (shorter tenure).
+## Contract type and affordability are key churn drivers.
+
+# FEATURE SELECTION
+
+```{r}
+# Boruta feature selection
+cat("Running Boruta Feature Selection...\n")
+boruta_result <- Boruta(Churn ~ ., data = churn_data, doTrace = 1)
+confirmed_vars <- getSelectedAttributes(boruta_result, withTentative = FALSE)
+
+# Plot Boruta results
+p <- plot(boruta_result, las = 2, cex.axis = 0.7, main = "Boruta Feature Importance")
+
+
+# Recursive Feature Elimination (RFE)
+x <- churn_data[, setdiff(names(churn_data), c("Churn", "customerID"))]
+y <- churn_data$Churn
+control <- rfeControl(functions = rfFuncs, method = "cv", number = 5)
+rfe_results <- rfe(x, y, sizes = 1:ncol(x), rfeControl = control)
+
+# Combine Boruta and RFE
+common_vars <- intersect(rfe_results$optVariables, confirmed_vars)
+cat("Selected Features:", common_vars, "\n")
+```
+
+# DATA PREPARATION FOR MODELING
+```{r}
+# Train/test split (80% train, 20% test)
+train_index <- createDataPartition(churn_data$Churn, p = 0.8, list = FALSE)
+train_data <- churn_data[train_index, c(common_vars, "Churn")]
+test_processed_ids <- churn_data$customerID[-train_index]
+test_data <- churn_data[-train_index, c(common_vars, "Churn")]
+
+# Apply SMOTE to training data
+rec <- recipe(Churn ~ ., data = train_data) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_smote(Churn)
+
+smote_train_data <- prep(rec, training = train_data) %>%
+  bake(new_data = NULL)
+
+# Process test data (no SMOTE)
+test_processed <- bake(prep(rec, training = train_data), new_data = test_data)
+
+# Verify class balance
+cat("Original Training Data Balance:\n")
+print(table(train_data$Churn))
+cat("SMOTE Training Data Balance:\n")
+print(table(smote_train_data$Churn))
+```
+
+# MODEL TRAINING
+
+```{r}
+# Define 5-fold cross-validation
+train_control <- trainControl(
+  method = "cv",
+  number = 5,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary
+)
+
+# Random Forest (Non-SMOTE)
+cat("Training Random Forest (Non-SMOTE)...\n")
+rf_non_smote <- train(
+  Churn ~ ., 
+  data = train_data,
+  method = "rf",
+  metric = "ROC",
+  trControl = train_control,
+  tuneLength = 5
+)
+
+# Random Forest (SMOTE)
+cat("Training Random Forest (SMOTE)...\n")
+rf_smote <- train(
+  Churn ~ ., 
+  data = smote_train_data,
+  method = "rf",
+  metric = "ROC",
+  trControl = train_control,
+  tuneLength = 5
+)
+
+# Logistic Regression (Non-SMOTE)
+cat("Training Logistic Regression (Non-SMOTE)...\n")
+logit_model <- train(
+  Churn ~ ., 
+  data = train_data,
+  method = "glm",
+  family = binomial,
+  trControl = train_control
+)
+
+# Logistic Regression (SMOTE)
+cat("Training Logistic Regression (SMOTE)...\n")
+logit_smote <- train(
+  Churn ~ ., 
+  data = smote_train_data,
+  method = "glm",
+  family = binomial,
+  metric = "ROC",
+  trControl = train_control
+)
+
+# Neural Network (Non-SMOTE)
+cat("Training Neural Network (Non-SMOTE)...\n")
+nnet_non_smote <- train(
+  Churn ~ ., 
+  data = train_data,
+  method = "nnet",
+  metric = "ROC",
+  trControl = train_control,
+  tuneGrid = expand.grid(
+    size = c(5, 10),
+    decay = c(0.01, 0.1)
+  ),
+  maxit = 300,
+  trace = FALSE
+)
+
+# Neural Network (SMOTE)
+cat("Training Neural Network (SMOTE)...\n")
+nnet_model <- train(
+  Churn ~ ., 
+  data = smote_train_data,
+  method = "nnet",
+  metric = "ROC",
+  trControl = train_control,
+  tuneGrid = expand.grid(
+    size = c(5, 10),
+    decay = c(0.01, 0.1)
+  ),
+  maxit = 300,
+  trace = FALSE
+)
+```
+
+# MODEL EVALUATION
+
+```{r}
+# Predictions - Non-SMOTE
+rf_non_smote_preds <- predict(rf_non_smote, newdata = test_data)
+rf_non_smote_probs <- predict(rf_non_smote, newdata = test_data, type = "prob")
+
+logit_non_smote_preds <- predict(logit_model, newdata = test_data)
+logit_non_smote_probs <- predict(logit_model, newdata = test_data, type = "prob")
+
+nnet_non_smote_preds <- predict(nnet_non_smote, newdata = test_data)
+nnet_non_smote_probs <- predict(nnet_non_smote, newdata = test_data, type = "prob")
+
+# Predictions - SMOTE
+rf_smote_preds <- predict(rf_smote, newdata = test_processed)
+rf_smote_probs <- predict(rf_smote, newdata = test_processed, type = "prob")
+
+logit_smote_preds <- predict(logit_smote, newdata = test_processed)
+logit_smote_probs <- predict(logit_smote, newdata = test_processed, type = "prob")
+
+nnet_smote_preds <- predict(nnet_model, newdata = test_processed)
+nnet_smote_probs <- predict(nnet_model, newdata = test_processed, type = "prob")
+
+# Confusion Matrices
+conf_mat_rf_non_smote <- confusionMatrix(rf_non_smote_preds, test_data$Churn, positive = "Yes")
+conf_mat_logit_non_smote <- confusionMatrix(logit_non_smote_preds, test_data$Churn, positive = "Yes")
+conf_mat_nnet_non_smote <- confusionMatrix(nnet_non_smote_preds, test_data$Churn, positive = "Yes")
+
+conf_mat_rf_smote <- confusionMatrix(rf_smote_preds, test_processed$Churn, positive = "Yes")
+conf_mat_logit_smote <- confusionMatrix(logit_smote_preds, test_processed$Churn, positive = "Yes")
+conf_mat_nnet_smote <- confusionMatrix(nnet_smote_preds, test_processed$Churn, positive = "Yes")
+
+# ROC Curves
+roc_rf_non_smote <- roc(test_data$Churn, rf_non_smote_probs[, "Yes"])
+roc_logit_non_smote <- roc(test_data$Churn, logit_non_smote_probs[, "Yes"])
+roc_nnet_non_smote <- roc(test_data$Churn, nnet_non_smote_probs[, "Yes"])
+
+roc_rf_smote <- roc(test_processed$Churn, rf_smote_probs[, "Yes"])
+roc_logit_smote <- roc(test_processed$Churn, logit_smote_probs[, "Yes"])
+roc_nnet_smote <- roc(test_processed$Churn, nnet_smote_probs[, "Yes"])
+
+# Model comparison table
+results <- data.frame(
+  Model = c("RF (Non-SMOTE)", "RF (SMOTE)", "Logistic (Non-SMOTE)", "Logistic (SMOTE)", "NN (Non-SMOTE)", "NN (SMOTE)"),
+  AUC = c(
+    auc(roc_rf_non_smote), auc(roc_rf_smote),
+    auc(roc_logit_non_smote), auc(roc_logit_smote),
+    auc(roc_nnet_non_smote), auc(roc_nnet_smote)
+  ),
+  Accuracy = c(
+    conf_mat_rf_non_smote$overall["Accuracy"], conf_mat_rf_smote$overall["Accuracy"],
+    conf_mat_logit_non_smote$overall["Accuracy"], conf_mat_logit_smote$overall["Accuracy"],
+    conf_mat_nnet_non_smote$overall["Accuracy"], conf_mat_nnet_smote$overall["Accuracy"]
+  ),
+  Sensitivity = c(
+    conf_mat_rf_non_smote$byClass["Sensitivity"], conf_mat_rf_smote$byClass["Sensitivity"],
+    conf_mat_logit_non_smote$byClass["Sensitivity"], conf_mat_logit_smote$byClass["Sensitivity"],
+    conf_mat_nnet_non_smote$byClass["Sensitivity"], conf_mat_nnet_smote$byClass["Sensitivity"]
+  ),
+  Specificity = c(
+    conf_mat_rf_non_smote$byClass["Specificity"], conf_mat_rf_smote$byClass["Specificity"],
+    conf_mat_logit_non_smote$byClass["Specificity"], conf_mat_logit_smote$byClass["Specificity"],
+    conf_mat_nnet_non_smote$byClass["Specificity"], conf_mat_nnet_smote$byClass["Specificity"]
+  )
+)
+
+print(results)
+
+# Plot ROC curves
+plot(roc_rf_non_smote, col = "blue", main = "ROC Curves for Churn Prediction")
+plot(roc_rf_smote, col = "red", add = TRUE)
+plot(roc_logit_non_smote, col = "green", add = TRUE)
+plot(roc_logit_smote, col = "darkgreen", add = TRUE)
+plot(roc_nnet_non_smote, col = "purple", add = TRUE)
+plot(roc_nnet_smote, col = "darkviolet", add = TRUE)
+
+legend("bottomright",
+       legend = c("RF Non-SMOTE", "RF SMOTE", "Logit Non-SMOTE", "Logit SMOTE", "NN Non-SMOTE", "NN SMOTE"),
+       col = c("blue", "red", "green", "darkgreen", "purple", "darkviolet"),
+       lwd = 2)
+
+# Save ROC plot
+png("plots/roc_curves.png", width = 600, height = 400)
+plot(roc_rf_non_smote, col = "blue", main = "ROC Curves for Churn Prediction")
+plot(roc_rf_smote, col = "red", add = TRUE)
+plot(roc_logit_non_smote, col = "green", add = TRUE)
+plot(roc_logit_smote, col = "darkgreen", add = TRUE)
+plot(roc_nnet_non_smote, col = "purple", add = TRUE)
+plot(roc_nnet_smote, col = "darkviolet", add = TRUE)
+legend("bottomright",
+       legend = c("RF Non-SMOTE", "RF SMOTE", "Logit Non-SMOTE", "Logit SMOTE", "NN Non-SMOTE", "NN SMOTE"),
+       col = c("blue", "red", "green", "darkgreen", "purple", "darkviolet"),
+       lwd = 2)
+dev.off()
+```
+
+# OPTIMAL THRESHOLDS
+
+```{r}
+# Calculate optimal thresholds using pROC 
+coords_rf_non_smote <- coords(roc_rf_non_smote, "best", best.method = "youden", best.policy = "first",
+                              ret = c("threshold", "sensitivity", "specificity"), transpose = FALSE)
+coords_rf_smote <- coords(roc_rf_smote, "best", best.method = "youden", best.policy = "first",
+                          ret = c("threshold", "sensitivity", "specificity"), transpose = FALSE)
+coords_logit_non_smote <- coords(roc_logit_non_smote, "best", best.method = "youden", best.policy = "first",
+                                 ret = c("threshold", "sensitivity", "specificity"), transpose = FALSE)
+coords_logit_smote <- coords(roc_logit_smote, "best", best.method = "youden", best.policy = "first",
+                             ret = c("threshold", "sensitivity", "specificity"), transpose = FALSE)
+coords_nnet_non_smote <- coords(roc_nnet_non_smote, "best", best.method = "youden", best.policy = "first",
+                                ret = c("threshold", "sensitivity", "specificity"), transpose = FALSE)
+coords_nnet_smote <- coords(roc_nnet_smote, "best", best.method = "youden", best.policy = "first",
+                            ret = c("threshold", "sensitivity", "specificity"), transpose = FALSE)
+
+grab_thr <- function(co) as.numeric(if (is.data.frame(co)) co$threshold[1] else co["threshold"][1])
+
+thr_rf_non_smote <- grab_thr(coords_rf_non_smote)
+thr_rf_smote <- grab_thr(coords_rf_smote)
+thr_logit_non_smote <- grab_thr(coords_logit_non_smote)
+thr_logit_smote <- grab_thr(coords_logit_smote)
+thr_nnet_non_smote <- grab_thr(coords_nnet_non_smote)
+thr_nnet_smote <- grab_thr(coords_nnet_smote)
+
+# Apply thresholds 
+rf_non_smote_preds_opt <- factor(ifelse(rf_non_smote_probs[, "Yes"] > thr_rf_non_smote, "Yes", "No"), levels = c("No", "Yes"))
+rf_smote_preds_opt <- factor(ifelse(rf_smote_probs[, "Yes"] > thr_rf_smote, "Yes", "No"), levels = c("No", "Yes"))
+logit_non_smote_preds_opt <- factor(ifelse(logit_non_smote_probs[, "Yes"] > thr_logit_non_smote, "Yes", "No"), levels = c("No", "Yes"))
+logit_smote_preds_opt <- factor(ifelse(logit_smote_probs[, "Yes"] > thr_logit_smote, "Yes", "No"), levels = c("No", "Yes"))
+nnet_non_smote_preds_opt <- factor(ifelse(nnet_non_smote_probs[, "Yes"] > thr_nnet_non_smote, "Yes", "No"), levels = c("No", "Yes"))
+nnet_smote_preds_opt <- factor(ifelse(nnet_smote_probs[, "Yes"] > thr_nnet_smote, "Yes", "No"), levels = c("No", "Yes"))
+
+# Confusion matrices 
+conf_mat_rf_non_smote_opt <- confusionMatrix(rf_non_smote_preds_opt, test_data$Churn, positive = "Yes")
+conf_mat_rf_smote_opt <- confusionMatrix(rf_smote_preds_opt, test_processed$Churn, positive = "Yes")
+conf_mat_logit_non_smote_opt <- confusionMatrix(logit_non_smote_preds_opt, test_data$Churn, positive = "Yes")
+conf_mat_logit_smote_opt <- confusionMatrix(logit_smote_preds_opt, test_processed$Churn, positive = "Yes")
+conf_mat_nnet_non_smote_opt <- confusionMatrix(nnet_non_smote_preds_opt, test_data$Churn, positive = "Yes")
+conf_mat_nnet_smote_opt <- confusionMatrix(nnet_smote_preds_opt, test_processed$Churn, positive = "Yes")
+
+# Clean summary table 
+opt_results <- data.frame(
+  Model = c("RF (Non-SMOTE)", "RF (SMOTE)", "Logistic (Non-SMOTE)", "Logistic (SMOTE)", "NN (Non-SMOTE)", "NN (SMOTE)"),
+  Threshold = c(thr_rf_non_smote, thr_rf_smote, thr_logit_non_smote, thr_logit_smote, thr_nnet_non_smote, thr_nnet_smote),
+  Sensitivity = c(conf_mat_rf_non_smote_opt$byClass["Sensitivity"], conf_mat_rf_smote_opt$byClass["Sensitivity"],
+                  conf_mat_logit_non_smote_opt$byClass["Sensitivity"], conf_mat_logit_smote_opt$byClass["Sensitivity"],
+                  conf_mat_nnet_non_smote_opt$byClass["Sensitivity"], conf_mat_nnet_smote_opt$byClass["Sensitivity"]),
+  Specificity = c(conf_mat_rf_non_smote_opt$byClass["Specificity"], conf_mat_rf_smote_opt$byClass["Specificity"],
+                  conf_mat_logit_non_smote_opt$byClass["Specificity"], conf_mat_logit_smote_opt$byClass["Specificity"],
+                  conf_mat_nnet_non_smote_opt$byClass["Specificity"], conf_mat_nnet_smote_opt$byClass["Specificity"])
+)
+
+print(opt_results)
+
+# Probability distribution plot (SMOTE RF)
+p <- ggplot(data.frame(prob = rf_smote_probs[, "Yes"], Churn = test_processed$Churn), aes(x = prob, fill = Churn)) +
+  geom_histogram(binwidth = 0.05, position = "identity", alpha = 0.5) +
+  geom_vline(xintercept = coords_rf_smote$threshold, linetype = "dashed", color = "red") +
+  labs(title = "Predicted Probabilities with Optimal Threshold (RF SMOTE)", x = "Churn Probability", y = "Count") +
+  theme_minimal()
+print(p)
+ggsave("plots/prob_dist_rf_smote.png", plot = p, width = 6, height = 4)
+
+# Precision-Recall Curve for Random Forest (SMOTE)
+scored_smote <- data.frame(
+  Actual = test_processed$Churn,
+  Predicted = rf_smote_preds,
+  Churn_Prob = rf_smote_probs[, "Yes"]
+)
+
+# Make Actual a factor
+scored_smote$Actual <- factor(scored_smote$Actual, levels = c("No", "Yes"))
+
+# Calculate precision-recall curve
+thresholds <- seq(0.05, 0.95, by = 0.05)
+prec_rec <- data.frame(
+  threshold = numeric(),
+  precision = numeric(),
+  recall = numeric(),
+  F1 = numeric()
+)
+
+for (t in thresholds) {
+  preds <- factor(ifelse(scored_smote$Churn_Prob >= t, "Yes", "No"), levels = c("No", "Yes"))
+  TP <- sum(preds == "Yes" & scored_smote$Actual == "Yes")
+  FP <- sum(preds == "Yes" & scored_smote$Actual == "No")
+  FN <- sum(preds == "No" & scored_smote$Actual == "Yes")
+  
+  precision <- if (TP + FP == 0) 0 else TP / (TP + FP)
+  recall <- if (TP + FN == 0) 0 else TP / (TP + FN)
+  F1 <- if (precision + recall == 0) 0 else 2 * precision * recall / (precision + recall)
+  
+  prec_rec <- rbind(
+    prec_rec,
+    data.frame(threshold = t, precision = precision, recall = recall, F1 = F1)
+  )
+}
+
+# Remove NA values
+prec_rec <- prec_rec[complete.cases(prec_rec), ]
+
+# Find best threshold by F1 score
+best_pr <- prec_rec[which.max(prec_rec$F1), ]
+
+# Output results
+cat("Best Threshold by F1 Score (RF SMOTE):\n")
+cat("Threshold:", best_pr$threshold, "\n")
+cat("Precision:", best_pr$precision, "\n")
+cat("Recall:", best_pr$recall, "\n")
+cat("F1 Score:", best_pr$F1, "\n")
+
+# Display first few rows
+cat("Precision-Recall Data (First 6 Rows):\n")
+print(head(prec_rec))
+
+# Plot PR curve
+p <- ggplot(prec_rec, aes(x = recall, y = precision)) +
+  geom_line(color = "blue") +
+  geom_point(data = best_pr, aes(x = recall, y = precision), color = "red", size = 3) +
+  labs(title = "Precision-Recall Curve (RF SMOTE)", x = "Recall", y = "Precision") +
+  theme_minimal()
+print(p)
+ggsave("plots/pr_curve.png", plot = p, width = 6, height = 4)
+
+# Compare pROC and PR curve thresholds
+cat("Threshold Comparison (RF SMOTE):\n")
+# pROC threshold
+old_pred <- ifelse(rf_smote_probs[, "Yes"] >= coords_rf_smote$threshold, "Yes", "No")
+cat("pROC Threshold Confusion Matrix:\n")
+print(confusionMatrix(factor(old_pred, levels = c("No", "Yes")), 
+                      factor(test_processed$Churn, levels = c("No", "Yes")),
+                      positive = "Yes"))
+
+# PR curve threshold
+new_pred <- ifelse(rf_smote_probs[, "Yes"] >= best_pr$threshold, "Yes", "No")
+cat("PR Curve Threshold Confusion Matrix:\n")
+print(confusionMatrix(factor(new_pred, levels = c("No", "Yes")), 
+                      factor(test_processed$Churn, levels = c("No", "Yes")),
+                      positive = "Yes"))
+```
+
+# FEATURE IMPORTANCE
+
+```{r}
+# Random Forest feature importance (SMOTE)
+importance_df <- as.data.frame(importance(rf_smote$finalModel)) %>%
+  tibble::rownames_to_column(var = "Feature") %>%
+  arrange(desc(MeanDecreaseGini))
+
+p <- ggplot(importance_df, aes(x = reorder(Feature, MeanDecreaseGini), y = MeanDecreaseGini)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Feature Importance (Random Forest SMOTE)", x = "Feature", y = "Mean Decrease Gini") +
+  theme_minimal()
+print(p)
+ggsave("plots/feature_importance.png", plot = p, width = 6, height = 4)
+```
+
+# BUSINESS INSIGHTS
+
+```{r}
+# Identify high-risk customers using PR curve (F1) threshold
+high_risk_pr <- test_processed %>%
+  mutate(Churn_Prob = rf_smote_probs[, "Yes"], CustomerID = test_processed_ids) %>%
+  filter(Churn_Prob > best_pr$threshold) %>%
+  select(CustomerID, Churn, Churn_Prob, -Churn_Prob, -CustomerID)  # Select all original columns
+
+cat("Number of High-Risk Customers (PR F1 Threshold):", nrow(high_risk_pr), "\n")
+cat("Sample High-Risk Customers (PR F1 Threshold):\n")
+print(head(high_risk_pr))
+print(table(high_risk_pr$Churn))
+
+# Identify high-risk customers using pROC threshold
+high_risk_proc <- test_processed %>%
+  mutate(Churn_Prob = rf_smote_probs[, "Yes"], CustomerID = test_processed_ids) %>%
+  filter(Churn_Prob > coords_rf_smote$threshold) %>%
+  select(CustomerID, Churn, Churn_Prob, -Churn_Prob, -CustomerID)  # Select all original columns
+
+cat("Number of High-Risk Customers (pROC Threshold):", nrow(high_risk_proc), "\n")
+cat("Sample High-Risk Customers (pROC Threshold):\n")
+print(head(high_risk_proc))
+print(table(high_risk_proc$Churn))
+
+# Rank customers by churn probability
+ranked_customers <- data.frame(
+  CustomerID = test_processed_ids,
+  Churn = test_processed$Churn,
+  Churn_Prob = rf_smote_probs[, "Yes"]
+)
+ranked_customers <- ranked_customers[order(-ranked_customers$Churn_Prob), ]
+ranked_customers$Rank <- 1:nrow(ranked_customers)
+top_10pct <- head(ranked_customers, round(0.10 * nrow(ranked_customers)))
+cat("Top 10% High-Risk Customers:\n")
+print(head(top_10pct, 20))
+
+# Cumulative gains chart
+scored_smote <- data.frame(
+  Actual = test_processed$Churn,
+  Predicted = rf_smote_preds,
+  Churn_Prob = rf_smote_probs[, "Yes"]
+)
+scored_smote$Actual <- factor(scored_smote$Actual, levels = c("No", "Yes"))
+results_ranked <- scored_smote[order(-scored_smote$Churn_Prob), ]
+n <- nrow(results_ranked)
+group_size <- ceiling(n / 10)
+groups <- rep(1:10, each = group_size)[1:n]
+results_ranked$group <- groups
+
+capture_table <- aggregate(Actual ~ group, data = results_ranked,
+                          FUN = function(x) sum(x == "Yes"))
+capture_table$customers <- as.vector(table(results_ranked$group))
+capture_table$cum_churners <- cumsum(capture_table$Actual)
+capture_table$capture_rate <- capture_table$cum_churners / sum(capture_table$Actual)
+capture_table <- capture_table[, c("group", "customers", "Actual", "cum_churners", "capture_rate")]
+names(capture_table)[3] <- "churners"
+print(capture_table)
+
+# Plot cumulative gains chart
+p <- ggplot(capture_table, aes(x = group * 10, y = capture_rate * 100)) +
+  geom_line(color = "blue") +
+  geom_point(color = "blue", size = 3) +
+  geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +
+  labs(title = "Cumulative Gains Chart", x = "Percent of Customers Targeted", y = "Percent of Churners Captured") +
+  ylim(0, 100) +
+  theme_minimal() +
+  theme(panel.grid.minor = element_blank())
+print(p)
+ggsave("plots/gains_chart.png", plot = p, width = 6, height = 4)
+
+# Calculate lift
+capture_table$lift <- capture_table$capture_rate / (capture_table$group / 10)
+
+# Plot lift chart
+p <- ggplot(capture_table, aes(x = group * 10, y = lift)) +
+  geom_line(color = "darkgreen") +
+  geom_point(color = "darkgreen", size = 3) +
+  geom_hline(yintercept = 1, color = "red", linetype = "dashed") +
+  labs(title = "Lift Chart", x = "Percent of Customers Targeted", y = "Lift") +
+  ylim(0, max(capture_table$lift) + 0.5) +
+  theme_minimal() +
+  theme(panel.grid.minor = element_blank())
+print(p)
+ggsave("plots/lift_chart.png", plot = p, width = 6, height = 4)
+```
+
+# RECOMMENDATIONS
+## Offer discounts to customers with high monthly charges and short tenure.
+## Promote longer-term contracts to reduce churn.
+## Target senior citizens with tailored retention strategies
+
+# SESSION INFOrmation
+
+```{r}
+sessionInfo()
+```
+

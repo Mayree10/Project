@@ -52,3 +52,9 @@ This project explores customer churn prediction using machine learning technique
 - **Documentation**: R Markdown and Quarto for reporting
 - **Visualization**: `ggplot2` for plots (saved in `plots/`)
 
+
+
+  ![ROC Curve](/Telco_churn/plots/roc_curves.png)
+![Capture Rate by Decile Chart](/Telco_churn/plots/capture_rate.png)
+
+

@@ -54,7 +54,5 @@ This project explores customer churn prediction using machine learning technique
 
 
 
-  ![ROC Curve](/Telco_churn/plots/roc_curves.png)
-![Capture Rate by Decile Chart](/Telco_churn/plots/capture_rate.png)
-
+ 
 

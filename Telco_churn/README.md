@@ -53,13 +53,10 @@ By predicting which customers are likely to churn, telecom companies can take **
   | Balanced Accuracy | ~0.75  |
 
 📈 Example visualization (Random Forest ROC Curve):  
-![ROC Curve Example](plots/roc_curve_rf.png)
-
-📊 Confusion Matrix (Random Forest, threshold-tuned)  
-![Confusion Matrix](plots/confusion_matrix_rf.png)
+![ROC Curve Example](plots/roc_curves.png)
 
 📈 Precision-Recall Curve (Threshold Tuning Example)  
-![Precision Recall Curve](plots/pr_curve_rf.png)
+![Precision Recall Curve](plots/pr_curve.png)
 
 
 ## 📌 Recommendations

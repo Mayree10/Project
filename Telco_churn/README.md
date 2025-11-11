@@ -59,8 +59,11 @@ ROI: +20.5%
 📈 PowerBI Dashboard:  
 ![Dashboard](plots/PowerBI.png)
 
-📈 Precision-Recall Curve (Threshold Tuning Example)  
+📈 Auc curves
 ![Auc curve](plots/auc_curve.png)
+
+📈 Feature Importance
+![Feature importance](plots/xgb_importance.png)
 
 
 ## 📌 Recommendations

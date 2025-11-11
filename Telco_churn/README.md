@@ -6,70 +6,84 @@ By predicting which customers are likely to churn, telecom companies can take **
 
 ## 📊 Project Overview
 - **Dataset**: Telco Customer Churn data (publicly available on [Kaggle](https://www.kaggle.com/blastchar/telco-customer-churn))
-- **Objective**: Predict whether a customer will churn (`Yes`/`No`)
+- **Objective**: Predict whether a customer will churn (`Yes`/`No`) and enable retention savings
 - **Techniques Used**:
-  - Data cleaning and preprocessing
-  - Handling class imbalance with SMOTE
-  - Random Forest, Logistic Regression, and Neural Network classification
-  - Threshold tuning for precision-recall tradeoff (F1-based and pROC-based)
-  - Model evaluation with confusion matrices, ROC curves, and metrics
+  Data cleaning & preprocessing  
+ - Class imbalance with ROSE (synthetic oversampling)  
+ - XGBoost, Random Forest, Logistic Regression  
+ - Threshold tuning 
+ - Model evaluation: confusion matrix, ROC, AUC, F1
+
+
 
 ## ⚙️ Methodology
 
 ### Data Preprocessing
-- Handled missing values
-- Converted categorical variables to factors and applied dummy encoding
-- Split data into 80% training and 20% test sets
-- Applied SMOTE to address class imbalance in training data
+- Cleaned missing values, converted types, trimmed whitespace
+- Encoded Yes/No → binary; all categoricals → factors
+- Split: 70% train / 30% test
+- Applied ROSE to balance training data (26% → ~50% churn)
+
 
 ### 🔹 Modeling
 - Trained three models:  
   - Random Forest  
   - Logistic Regression  
-  - Neural Network  
-- Compared performance **with vs. without SMOTE**
+  - XGBOOST  
 - Tuned classification thresholds:
-  - **Precision-Recall curve** → maximize F1-score  
-  - **ROC curve (pROC)** → optimize Youden’s J statistic
 
 ### Evaluation Metrics
 - Accuracy
 - Precision, Recall, F1-score
-- Balanced Accuracy
-- Kappa statistic
+- Accuracy
 - Area Under the ROC Curve (AUC)
 
 ## ✅ Results
-- **Random Forest with SMOTE** performed best for detecting churn, at the cost of some false positives.  
-- Threshold tuning revealed tradeoffs:  
-  - **F1-based threshold** → higher recall (captured more churners)  
-  - **pROC-based threshold** → balanced recall and specificity  
-- Example performance metrics (with threshold tuning, approximate values):
-  | Metric            | Value  |
-  |-------------------|--------|
-  | Accuracy          | ~0.76  |
-  | Sensitivity (Recall) | ~0.78 |
-  | Specificity       | ~0.72  |
-  | Balanced Accuracy | ~0.75  |
+| Model               | Accuracy | Precision | Recall   | F1        | AUC       |
+|----------------------|-----------|------------|----------|-----------|-----------|
+| Logistic Regression  | 0.7355    | 0.5017     | 0.7825   | 0.6114    | 0.7505    |
+| Random Forest        | 0.7445    | 0.5129     | 0.7825   | 0.6196    | 0.7567    |
+| XGBoost              | 0.7336    | 0.4994     | 0.8021   | 0.6156    | 0.7555    |
 
-📈 Example visualization (Random Forest ROC Curve):  
-![ROC Curve Example](plots/roc_curves.png)
+Random Forest wins on F1 (0.620) and AUC (0.757)
+XGBoost captures more churners (80.2% recall)  
+
+High-Risk Campaign ImpactFlagged 2,905 customers as high-risk  
+1,499 actually churned → 51.6% precision  
+30% retention success → 450 saved  
+Annual revenue saved: $349,910  
+Cost ($100/offer): $290,500  
+Net profit: +$59,410  
+ROI: +20.5%
+
+📈 PowerBI Dashboard:  
+![Dashboard](plots/PowerBI.png)
 
 📈 Precision-Recall Curve (Threshold Tuning Example)  
-![Precision Recall Curve](plots/pr_curve.png)
+![Auc curve](plots/auc_curve.png)
 
 
 ## 📌 Recommendations
-- **Target high-risk customers** (as identified by the model) with tailored retention offers (discounts, loyalty perks, personalized support).  
-- **Monitor service quality factors** (tenure, contract type, payment method) since they were strong churn predictors.  
-- **Prioritize recall over accuracy** in production → better to flag more potential churners (with some false positives) than miss likely churners.  
-- **Retrain models quarterly** as customer behavior and service features evolve.  
+Deploy Random Forest for best overall F1 (0.62)  
+Use XGBoost if maximizing recall is priority (80% of churners caught)  
+Target top 2,905 high-risk customers with:  $100 discount  
+Contract upgrade offer  
+Personalized support
+
+Prioritize: Month-to-month, fiber optic, electronic check  
+Focus on: Seniors & new users (<12 months)  
+Retrain quarterly — customer behavior evolves  
+Integrate risk score into CRM for real-time alerts 
 
 
 ## 🛠️ Tools & Libraries
 - **R Packages**: `caret`, `randomForest`, `dplyr`, `recipes`, `nnet`, `ggplot2`, `pROC`, `themis`
 - **Documentation**: R Markdown and Quarto for reporting
 - **Visualization**: `ggplot2` for plots (saved in `plots/`)
+
+
+
+
 
 
 ✨ Author: Mary Ogwo

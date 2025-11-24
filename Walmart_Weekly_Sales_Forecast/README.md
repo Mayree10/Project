@@ -1,16 +1,19 @@
 📈 Walmart Weekly Sales Forecasting
-Forecasting weekly sales using historical Walmart data, time-series modeling, and Python. This project analyzes trends, builds a predictive model, and visualizes forecast intervals with upper and lower confidence bounds.
+Forecasting weekly Walmart sales using time-series analysis and Prophet.
+The project explores sales trends, identifies key drivers, and generates future predictions with confidence intervals.
+
+📌 Original dataset: Kaggle – Walmart Weekly Sales
+https://www.kaggle.com/datasets/yasserh/walmart-dataset
 
 🔍 Project Overview
-The goal of this project is to understand Walmart’s weekly sales patterns and build a forecasting model capable of predicting future sales with uncertainty estimates (confidence intervals).
-The project includes:
-Data cleaning & preparation
-Exploratory time-series analysis
-Building a mixed effect model to understand what regressors drives sales
-Forecasting using Prophet
-Generating lower and upper forecast bounds
-Combining historical sales data with forecast sales
-Exporting final results for Power BI visualization
+The goal of this project is to analyze Walmart’s weekly sales patterns and build a forecasting model capable of predicting future sales along with uncertainty estimates (upper and lower bounds).
+This project includes:
+- Data cleaning & preparation
+- Exploratory time-series analysis
+- Mixed-effects regression to identify key drivers of sales
+- Forecasting using Prophet with external regressors
+- Combining historical + forecasted values
+- Power BI dashboard for interactive visualization
 
 🛠️ Tools & Technologies
 Python (Pandas, NumPy, Matplotlib, Seaborn, Statsmodels, Prophet, Sklearn)
@@ -19,43 +22,51 @@ Power BI (for final visualization)
 GitHub (project documentation)
 
 
-/walmart-sales-analysis/
-│
-├── data/                     # Raw, cleaned & combined datasets
-├── plots/                   # Saved Python plots for README + dashboard screenshots
-├── walmart_sales_analysis.ipynb   # Complete analysis notebook
-├── PowerBI_Dashboard.pbix    # Power BI report 
-└── README.md                 # Project documentation
-
 📈 Key Insights 
-Weekly sales show strong yearly seasonality, with spikes around major holidays.
-Temperature, fuel prices, and CPI have minor influence on sales compared to unemployment.
-Stores show similar trends with some stores showing more stable sales pattern.
-Forecasts indicate moderate growth.
+- Weekly sales display strong yearly seasonality with noticeable spikes during holiday periods
+- Unemployment shows a stronger relationship with sales compared to CPI, fuel price, or temperature.
+- Stores show similar trends with some stores showing more stable sales pattern.
+- Forecasts suggest moderate variation across stores, captured in the confidence bounds.
 
 
 📊 Exploratory Analysis
 Key steps included:
 Identifying seasonality in weekly sales
+Identifying factors affecting sales
 Visualizing historical trends
-![Weekly Sales](visuals/weekly_sales_plot.png)
+
+Examples of visuals generated during analysis:
+![Weekly Sales by Holiday Flag](Plots/weekly_sales_by_holiday_flag.png)
+![Top 5 Stores](Plots/top_5_stores.png)
+![Correlation Heatmap](Plots/correlation_heatmap.png)
 
 🔮 Forecasting Approach
 
 Model Selection:
-1. Linear model with fixed effect which tells us which factors drive sales up or down after controlling for differences between stores. R-squared: 0.920
-2. A Prophet model which was extended with external regressors so that the forecast could account for real-world factors that influence sales.
-This makes the forecasts more realistic and store-specific.
+1. Mixed-Effects Regression Model
+- A linear model with fixed store effects was used to determine which external regressors influence sales.
+- Allows controlling for inherent differences between stores
+- Helps interpret impact of holiday flag, temperature, CPI, fuel price, and unemployment
+- R-squared ≈ 0.92, suggesting the features explain a large portion of the variation
 
-The forecasts were appended to historical data in Power BI for visualizations
-![Power BI Dashboard](visuals/weekly_sales_plot.png)
+2. Prophet Forecasting Model
+A Prophet model extended with external regressors was used to generate 30 weeks of forecasts for each store.
+Why Prophet?
+- Automatically handles seasonality (weekly, yearly)
+- Works well with retail patterns
+- Accepts regressors to incorporate real-world signals
+- Produces upper/lower confidence bounds for uncertainty estimation
+
+Forecast results were exported and merged with historical data in Power BI:
+![Power BI Dashboard](Plots/sales_dashboard.png)
  
 🚀 How to Run
 
-Clone the repo
+1. Clone the repository
+   git clone https://github.com/Mayree10/Project.git
 
-Install dependencies
-pip install -r requirements.txt
+2. Install dependencies
+   pip install -r requirements.txt
 
-Run the notebook
-jupyter notebook walmart_sales_analysis.ipynb
+3. Run the notebook
+   jupyter notebook walmart_sales_analysis.ipynb

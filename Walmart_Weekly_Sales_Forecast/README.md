@@ -36,10 +36,13 @@ Key steps included:
 - Visualizing historical trends
 
 Examples of visuals generated during analysis:
+Weekly Sales By Holiday Flag
 ![Weekly Sales by Holiday Flag](Plots/weekly_sales_by_holiday_flag.png)
 
+Top 5 Stores
 ![Top 5 Stores](Plots/top_5_stores.png)
 
+Correlation Heatmap
 ![Correlation Heatmap](Plots/correlation_heatmap.png)
 
 🔮 Forecasting Approach

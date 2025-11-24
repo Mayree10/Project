@@ -19,7 +19,7 @@ This project includes:
 Python (Pandas, NumPy, Matplotlib, Seaborn, Statsmodels, Prophet, Sklearn)
 Jupyter Notebook
 Power BI (for final visualization)
-GitHub (project documentation)
+GitHub (project documentation and version control)
 
 
 📈 Key Insights 
@@ -31,13 +31,15 @@ GitHub (project documentation)
 
 📊 Exploratory Analysis
 Key steps included:
-Identifying seasonality in weekly sales
-Identifying factors affecting sales
-Visualizing historical trends
+- Identifying seasonality in weekly sales
+- Identifying factors affecting sales
+- Visualizing historical trends
 
 Examples of visuals generated during analysis:
 ![Weekly Sales by Holiday Flag](Plots/weekly_sales_by_holiday_flag.png)
+
 ![Top 5 Stores](Plots/top_5_stores.png)
+
 ![Correlation Heatmap](Plots/correlation_heatmap.png)
 
 🔮 Forecasting Approach

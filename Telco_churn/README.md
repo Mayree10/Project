@@ -1,42 +1,35 @@
-# Telco Customer Churn Prediction
-
-This project explores **customer churn prediction** using machine learning techniques on the [Telco Customer Churn dataset](https://www.kaggle.com/blastchar/telco-customer-churn).  
-
-By predicting which customers are likely to churn, telecom companies can take **proactive retention actions** (discounts, loyalty rewards, better support), ultimately reducing revenue loss.
+## TELCO CUSTOMER CHURN PREDICTION
+This project builds a machine learning–powered churn detection system that identifies customers likely to leave — enabling proactive retention and revenue savings for a telecom company.
 
 ## 📊 Project Overview
-- **Dataset**: Telco Customer Churn data (publicly available on [Kaggle](https://www.kaggle.com/blastchar/telco-customer-churn))
-- **Objective**: Predict whether a customer will churn (`Yes`/`No`) and enable retention savings
-- **Techniques Used**:
-  Data cleaning & preprocessing  
- - Class imbalance with ROSE (synthetic oversampling)  
- - XGBoost, Random Forest, Logistic Regression  
- - Threshold tuning 
- - Model evaluation: confusion matrix, ROC, AUC, F1
+Dataset: Telco Customer Churn (public, from Kaggle)
+Goal: Predict customer churn and estimate retention-based revenue impact
+Techniques Used:
+- Data cleaning & feature engineering
+- Class imbalance handling with ROSE
+- Models: Logistic Regression, Random Forest, XGBoost
+- Threshold tuning to optimize F1
+- Evaluation: Confusion matrix, ROC/AUC, Precision–Recall
 
 
 
 ## ⚙️ Methodology
+1. Data Preprocessing
+- Cleaned missing values and corrected data types
+- Encoded Yes/No → binary; other categoricals → factors
+- Train/test split: 70/30
+- Balanced the training set using ROSE (churn from 26% → ~50%)
 
-### Data Preprocessing
-- Cleaned missing values, converted types, trimmed whitespace
-- Encoded Yes/No → binary; all categoricals → factors
-- Split: 70% train / 30% test
-- Applied ROSE to balance training data (26% → ~50% churn)
+2. Modeling
+- Trained and evaluated three models: Logistic Regression, Random Forest and XGBoost
+- Each model was tested across thresholds from 0.30 to 0.60 to maximize performance.
 
-
-### 🔹 Modeling
-- Trained three models:  
-  - Random Forest  
-  - Logistic Regression  
-  - XGBOOST  
-- Tuned classification thresholds:
-
-### Evaluation Metrics
+3. Evaluation Metrics
 - Accuracy
-- Precision, Recall, F1-score
-- Accuracy
-- Area Under the ROC Curve (AUC)
+- Precision
+- Recall
+- F1-score
+- AUC (Area Under ROC Curve)
 
 ## ✅ Results
 | Model               | Accuracy | Precision | Recall   | F1        | AUC       |
@@ -45,16 +38,23 @@ By predicting which customers are likely to churn, telecom companies can take **
 | Random Forest        | 0.7445    | 0.5129     | 0.7825   | 0.6196    | 0.7567    |
 | XGBoost              | 0.7336    | 0.4994     | 0.8021   | 0.6156    | 0.7555    |
 
-Random Forest wins on F1 (0.620) and AUC (0.757)
-XGBoost captures more churners (80.2% recall)  
+## Takeaways:
+- Random Forest delivered the strongest F1 and AUC
+- XGBoost captured the most churners (highest recall → 80.2%)
+  
+## 💰 High-Risk Retention Impact
+Using the optimized XGBoost threshold:
+- High-risk customers flagged: 2,905
+- Actual churners within that group: 1,499
+- Precision: 51.6%
+- Estimated retention success: 30%
+- Customers saved: 450
 
-High-Risk Campaign ImpactFlagged 2,905 customers as high-risk  
-1,499 actually churned → 51.6% precision  
-30% retention success → 450 saved  
-Annual revenue saved: $349,910  
-Cost ($100/offer): $290,500  
-Net profit: +$59,410  
-ROI: +20.5%
+## 💵 Financial Impact
+- Annual revenue saved: $349,910
+- Campaign cost ($100 offer × customers): $290,500
+- Net profit: + $59,410
+- ROI: +20.5%
 
 📈 PowerBI Dashboard:  
 ![Dashboard](plots/PowerBI.png)
@@ -67,22 +67,22 @@ ROI: +20.5%
 
 
 ## 📌 Recommendations
-Deploy Random Forest for best overall F1 (0.62)  
-Use XGBoost if maximizing recall is priority (80% of churners caught)  
-Target top 2,905 high-risk customers with:  $100 discount  
-Contract upgrade offer  
-Personalized support
-
-Prioritize: Month-to-month, fiber optic, electronic check  
-Focus on: Seniors & new users (<12 months)  
-Retrain quarterly — customer behavior evolves  
-Integrate risk score into CRM for real-time alerts 
-
+- Deploy Random Forest for best overall performance (F1/AUC)
+- Use XGBoost when maximizing recall is the priority
+- Focus retention offers on:
+  - Month-to-month contracts
+  - Fiber optic + no online security
+  - Electronic check users
+  - Senior citizens
+  - Tenure < 12 months
+- Provide $100 loyalty/upgrade incentive for high-risk segment
+- Retrain model quarterly
+- Integrate churn risk into CRM for real-time alerts
 
 ## 🛠️ Tools & Libraries
-- **R Packages**: `caret`, `randomForest`, `dplyr`, `recipes`, `nnet`, `ggplot2`, `pROC`, `themis`
-- **Documentation**: R Markdown and Quarto for reporting
-- **Visualization**: `ggplot2` for plots (saved in `plots/`)
+R Packages: tidyverse, caret, randomForest, pROC, ROSE, xgboost, ggplot2
+Reporting: Quarto / R Markdown
+Visualization: Power BI and ggplot2
 
 
 

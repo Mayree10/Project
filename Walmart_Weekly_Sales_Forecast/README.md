@@ -36,6 +36,7 @@ Key steps included:
 - Visualizing historical trends
 
 Examples of visuals generated during analysis:
+![Weekly Sales Over Time](Plots/weekly_sales.png)
 
 ![Weekly Sales by Holiday Flag](Plots/weekly_sales_by_holiday_flag.png)
 

@@ -40,9 +40,7 @@ Examples of visuals generated during analysis:
 
 ![Weekly Sales by Holiday Flag](Plots/weekly_sales_by_holiday_flag.png)
 
-
-![Top 5 Stores](Plots/top_5_stores.png)
-
+![Store Trend with Top 5 Stores](Plots/top_5_stores.png)
 
 ![Correlation Heatmap](Plots/correlation_heatmap.png)
 
